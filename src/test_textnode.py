@@ -1,6 +1,6 @@
 import unittest
 
-from functions import split_nodes_delimiter
+from inline_markdown import split_nodes_delimiter
 from textnode import TextNode, TextType, text_node_to_html_node
 
 
