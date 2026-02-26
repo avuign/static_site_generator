@@ -22,55 +22,86 @@ def copy_content(source, target, clean=False):
             copy_content(src_path, dst_path, clean=False)
 
 
-def extract_title(markdown):
-    lines = markdown.split("\n")
-    for line in lines:
-        if line[0] == "#" and line[1] != "#":
-            return line.split(" ", 1)[1]
-    raise Exception("no title found")
+def copy_files_recursive(source_dir_path, dest_dir_path):
+    if not os.path.exists(dest_dir_path):
+        os.mkdir(dest_dir_path)
+
+    for filename in os.listdir(source_dir_path):
+        from_path = os.path.join(source_dir_path, filename)
+        dest_path = os.path.join(dest_dir_path, filename)
+        print(f" * {from_path} -> {dest_path}")
+        if os.path.isfile(from_path):
+            shutil.copy(from_path, dest_path)
+        else:
+            copy_files_recursive(from_path, dest_path)
+
+
+def generate_pages_recursive(dir_path_content, template_path, dest_dir_path, basepath):
+    for filename in os.listdir(dir_path_content):
+        from_path = os.path.join(dir_path_content, filename)
+        dest_path = os.path.join(dest_dir_path, filename)
+        if os.path.isfile(from_path):
+            dest_path = Path(dest_path).with_suffix(".html")
+            generate_page(from_path, template_path, dest_path, basepath)
+        else:
+            generate_pages_recursive(from_path, template_path, dest_path, basepath)
 
 
 def generate_page(from_path, template_path, dest_path, basepath):
-    print(f"Generating page from {from_path} to {dest_path} using {template_path}")
-    md = open(from_path)
-    md_content = md.read()
-    md.close()
-    tp = open(template_path)
-    tp_content = tp.read()
-    tp.close()
-    html_string = markdown_to_html_node(md_content).to_html()
-    title = extract_title(md_content)
-    new = (
-        tp_content.replace("{{ Title }}", title)
-        .replace("{{ Content }}", html_string)
-        .replace('href="/', f'href="{basepath}')
-        .replace('src="/', f'src="{basepath}')
-    )
-    dst = open(dest_path, mode="w")
-    dst.write(new)
-    dst.close()
+    print(f" * {from_path} {template_path} -> {dest_path}")
+    from_file = open(from_path, "r")
+    markdown_content = from_file.read()
+    from_file.close()
+
+    template_file = open(template_path, "r")
+    template = template_file.read()
+    template_file.close()
+
+    node = markdown_to_html_node(markdown_content)
+    html = node.to_html()
+
+    title = extract_title(markdown_content)
+    template = template.replace("{{ Title }}", title)
+    template = template.replace("{{ Content }}", html)
+    template = template.replace('href="/', 'href="' + basepath)
+    template = template.replace('src="/', 'src="' + basepath)
+
+    dest_dir_path = os.path.dirname(dest_path)
+    if dest_dir_path != "":
+        os.makedirs(dest_dir_path, exist_ok=True)
+    to_file = open(dest_path, "w")
+    to_file.write(template)
 
 
-def generate_page_recursive(dir_path_content, template_path, des_dir_path, basepath):
-    for elem in os.listdir(dir_path_content):
-        src_path = os.path.join(dir_path_content, elem)
-        dst_path = os.path.join(des_dir_path, elem)
-        if os.path.isfile(src_path):
-            dst_path = dst_path[:-2] + "html"
-            generate_page(src_path, template_path, dst_path, basepath)
-        else:
-            if not os.path.exists(dst_path):
-                os.mkdir(dst_path)
-            generate_page_recursive(src_path, template_path, dst_path, basepath)
+def extract_title(md):
+    lines = md.split("\n")
+    for line in lines:
+        if line.startswith("# "):
+            return line[2:]
+    raise ValueError("no title found")
+
+
+dir_path_static = "./static"
+dir_path_public = "./docs"
+dir_path_content = "./content"
+template_path = "./template.html"
+default_basepath = "/"
 
 
 def main():
-    if sys.argv:
-        basepath = sys.argv[0]
-    else:
-        basepath = "/"
-    copy_content("static", "docs", clean=True)
-    generate_page_recursive("content", "template.html", "docs", basepath)
+    basepath = default_basepath
+    if len(sys.argv) > 1:
+        basepath = sys.argv[1]
+
+    print("Deleting public directory...")
+    if os.path.exists(dir_path_public):
+        shutil.rmtree(dir_path_public)
+
+    print("Copying static files to public directory...")
+    copy_files_recursive(dir_path_static, dir_path_public)
+
+    print("Generating content...")
+    generate_pages_recursive(dir_path_content, template_path, dir_path_public, basepath)
 
 
 main()
